@@ -8,6 +8,11 @@ import simpleaudio as sa
 from transformers import pipeline
 from TTS.api import TTS
 from ollama import Client
+from langchain.agents import initialize_agent, load_tools
+from langchain.agents import AgentType
+from langchain_community.llms import Ollama
+from langchain.tools import Tool
+from langchain.utilities import WikipediaAPIWrapper
 
 current_folder = os.path.dirname(os.path.abspath(__file__))
 
@@ -45,22 +50,43 @@ class WhisperASR:
     def transcribe(self, audio, rate):
         sample = {"array": audio.astype(np.float32) / 32768.0, "sampling_rate": rate}
         return self.pipe(sample)["text"]
-    
-# Get response from LLM
+
+# Get response from LLM using Langchain Agent
 class LLMModel:
     def __init__(self, model_name='qwen2.5-coder:0.5b', max_words=20):
-        self.client = Client()
         self.model_name = model_name
         self.max_words = max_words
+        #self.client = Client()
+        self.llm = Ollama(model=self.model_name)
+        self.search_tool = WikipediaAPIWrapper()
+        self.tools = load_tools(["llm-math"], llm=self.llm)
+        self.tools.append(
+            Tool(
+                name="Search",
+                func=self.search_tool.run,
+                description="Use esta ferramenta para pesquisar informações na Wikipedia, e de uma resposta curta."
+            )
+        )
+        self.agent = initialize_agent(
+            tools=self.tools,
+            llm=self.llm,
+            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+            verbose=True,
+            max_iterations = 2
+        )
 
     def get_response(self, text):
         try:
-            messages = [
-                {'role': 'system', 'content': f'Seu nome é Arandu. Você é um assistente que fornece respostas objetivas, claras e diretas, com no máximo {self.max_words} palavras.'},
-                {'role': 'user', 'content': text}
-            ]
-            response = self.client.chat(model=self.model_name, messages=messages)
-            return response['message']['content'][:120]  # return max 120 characters
+            query = f"Seu nome é Arandu. Você é um assistente que fornece respostas objetivas, claras e diretas, com no máximo {self.max_words} palavras. {text}"
+            response = self.agent.run(query)
+            return response[:120]  # return max 120 characters
+        
+            #messages = [
+            #        {'role': 'system', 'content': f'Seu nome é Arandu. Você é um assistente que fornece respostas objetivas, claras e diretas, com no máximo {self.max_words} palavras.'},
+            #        {'role': 'user', 'content': text}
+            #    ]
+            #response = self.client.chat(model=self.model_name, messages=messages)
+            #return response['message']['content'][:120]  # return max 120 characters
         except Exception as e:
             print(f"Error querying Ollama: {e}")
             return ""
