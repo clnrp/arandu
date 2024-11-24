@@ -21,6 +21,8 @@ class VoiceRecorder:
         self.frame_duration_ms = frame_duration_ms
         self.chunk = int(rate * frame_duration_ms / 1000)
         self.recognizer = sr.Recognizer()
+        #self.recognizer.energy_threshold = 400
+        self.recognizer.dynamic_energy_threshold = True
 
     def record_voice(self):
         with sr.Microphone(sample_rate=self.rate) as source:
